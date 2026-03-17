@@ -1,0 +1,93 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Resonance User Profile",
+  "description": "Structured profile generated from AI chatbot conversation",
+  "type": "object",
+  "required": ["name", "age", "gender", "big_five", "attachment_style", "love_language"],
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "age": { "type": "integer", "minimum": 18, "maximum": 99 },
+    "gender": { "type": "string", "enum": ["male", "female", "non-binary"] },
+    "city": { "type": "string" },
+    "occupation": { "type": "string" },
+    "big_five": {
+      "type": "object",
+      "required": ["openness", "conscientiousness", "extraversion", "agreeableness", "neuroticism"],
+      "properties": {
+        "openness": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "conscientiousness": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "extraversion": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "agreeableness": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "neuroticism": { "type": "integer", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "attachment_style": {
+      "type": "object",
+      "properties": {
+        "primary": { "type": "string", "enum": ["secure", "anxious", "avoidant", "disorganized"] },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "love_language": {
+      "type": "object",
+      "properties": {
+        "primary": { "type": "string" },
+        "secondary": { "type": "string" },
+        "ranking": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "lifestyle": {
+      "type": "object",
+      "properties": {
+        "social_energy": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "routine_vs_spontaneous": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "health_consciousness": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "ambition_level": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "morning_person": { "type": "boolean" },
+        "substance_stance": { "type": "string" }
+      }
+    },
+    "values": {
+      "type": "object",
+      "properties": {
+        "top_values": { "type": "array", "items": { "type": "string" } },
+        "family_importance": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "faith_importance": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "career_drive": { "type": "integer", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "dealbreakers": { "type": "array", "items": { "type": "string" } },
+    "partner_preferences": {
+      "type": "object",
+      "properties": {
+        "energy_type": { "type": "string" },
+        "intellectual_match": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "similarity_vs_complement": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "key_qualities": { "type": "array", "items": { "type": "string" } },
+        "conflict_style": { "type": "string" },
+        "togetherness_need": { "type": "integer", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "relationship_goals": {
+      "type": "object",
+      "properties": {
+        "looking_for": { "type": "string" },
+        "timeline": { "type": "string" },
+        "commitment_readiness": { "type": "integer", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "communication_style": {
+      "type": "object",
+      "properties": {
+        "vibe": { "type": "string" },
+        "depth": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "humor_level": { "type": "integer", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "personality_summary": { "type": "string" }
+  }
+}

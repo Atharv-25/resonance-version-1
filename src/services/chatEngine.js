@@ -1,0 +1,268 @@
+/**
+ * RESONANCE — Chat Engine
+ * 
+ * Manages conversation flow with Gemini AI, phase tracking,
+ * context management, and profile extraction.
+ * API key is hardcoded for zero-friction user experience.
+ */
+
+import { GoogleGenerativeAI } from '@google/generative-ai'
+import { getResoPrompt, PHASE_SIGNALS } from './resonancePrompt'
+import { storage } from './storage'
+
+// ══ HARDCODED API KEY — replace with your Gemini API key ══
+const GEMINI_API_KEY = 'AIzaSyCCm1fol2mEeQ6ZfXSp8mWrqnKr5TVKdmc'
+
+let genAI = null
+let chatSession = null
+let currentUserGender = null
+
+/**
+ * Initialize the Gemini client (uses hardcoded key)
+ */
+function ensureAI() {
+  if (!genAI) {
+    genAI = new GoogleGenerativeAI(GEMINI_API_KEY)
+  }
+  return genAI
+}
+
+/**
+ * Start a new conversation with the gender-appropriate persona
+ * @param {'male'|'female'} userGender
+ * @param {Array} existingMessages — for resuming
+ */
+export async function startConversation(userGender, existingMessages = []) {
+  ensureAI()
+  currentUserGender = userGender
+
+  const systemPrompt = getResoPrompt(userGender)
+
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-2.5-flash',
+    generationConfig: {
+      temperature: 0.92,
+      topP: 0.95,
+      topK: 40,
+      maxOutputTokens: 512, // shorter responses
+    },
+    safetySettings: [
+      { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+      { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+      { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+      { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+    ],
+  })
+
+  // Build conversation history for resuming
+  const history = existingMessages
+    .filter(m => m.role === 'user' || m.role === 'model')
+    .map(m => ({
+      role: m.role === 'bot' ? 'model' : m.role,
+      parts: [{ text: m.text }],
+    }))
+
+  chatSession = model.startChat({
+    history,
+    systemInstruction: {
+      parts: [{ text: systemPrompt }],
+    },
+  })
+
+  return chatSession
+}
+
+/**
+ * Get the initial greeting from Reso (bot speaks first)
+ */
+export async function getInitialGreeting(userGender) {
+  if (!chatSession) {
+    await startConversation(userGender)
+  }
+
+  // Retry up to 3 times for rate limit errors
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const result = await chatSession.sendMessage(
+        "[SYSTEM: Start of a new conversation. Send your opening message. Be warm, casual, use rizz. Follow your opening script. Keep it short — 2-3 sentences max.]"
+      )
+      return result.response.text()
+    } catch (error) {
+      console.error(`Greeting error (attempt ${attempt + 1}):`, error)
+      const isRateLimit = error.message?.includes('429') || error.message?.includes('quota') || error.message?.includes('RESOURCE_EXHAUSTED')
+      if (isRateLimit && attempt < 2) {
+        console.log(`Rate limited, retrying in ${(attempt + 1) * 15}s...`)
+        await new Promise(r => setTimeout(r, (attempt + 1) * 15000))
+        continue
+      }
+    }
+  }
+  // Fallback greeting
+  return "hey ✨ I'm Reso. think of me as that one friend who somehow always knows who'd be perfect for you. I'm gonna ask you some stuff — not the boring generic questions tho, promise. but first — what should I call you?"
+}
+
+/**
+ * Send a message to Reso and get the response
+ */
+export async function sendMessage(userText, messages = []) {
+  if (!chatSession) {
+    await startConversation(currentUserGender || 'male', messages)
+  }
+
+  // Retry up to 3 times for rate limit errors
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const result = await chatSession.sendMessage(userText)
+      const responseText = result.response.text()
+      
+      // Check if the response contains the profile JSON
+      const profileData = extractProfileFromResponse(responseText)
+      
+      // Clean the response text (remove the JSON block if present)
+      const cleanText = responseText.replace(/\$\$RESONANCE_PROFILE\$\$[\s\S]*?\$\$RESONANCE_PROFILE\$\$/g, '').trim()
+
+      return {
+        text: cleanText,
+        profileData,
+        isComplete: !!profileData,
+      }
+    } catch (error) {
+      console.error(`Chat error (attempt ${attempt + 1}):`, error)
+      const isRateLimit = error.message?.includes('429') || error.message?.includes('quota') || error.message?.includes('RESOURCE_EXHAUSTED')
+      
+      if (isRateLimit && attempt < 2) {
+        console.log(`Rate limited, retrying in ${(attempt + 1) * 15}s...`)
+        await new Promise(r => setTimeout(r, (attempt + 1) * 15000))
+        continue
+      }
+
+      if (isRateLimit) {
+        return {
+          text: "yo the API is being rate limited rn 😅 wait like 30 secs and try again? free tier vibes lol",
+          profileData: null,
+          isComplete: false,
+          error: 'rate_limit',
+        }
+      }
+
+      if (error.message?.includes('API_KEY_INVALID') || error.message?.includes('API key not valid')) {
+        return {
+          text: "the API key isn't working rn 😬 might need a new one",
+          profileData: null,
+          isComplete: false,
+          error: 'invalid_key',
+        }
+      }
+
+      return {
+        text: "oops something glitched on my end. mind sending that again?",
+        profileData: null,
+        isComplete: false,
+        error: error.message,
+      }
+    }
+  }
+}
+
+/**
+ * Extract profile JSON from Reso's final response
+ */
+function extractProfileFromResponse(text) {
+  const match = text.match(/\$\$RESONANCE_PROFILE\$\$([\s\S]*?)\$\$RESONANCE_PROFILE\$\$/)
+  if (!match) return null
+
+  try {
+    const profileJSON = match[1].trim()
+    const profile = JSON.parse(profileJSON)
+    
+    if (!profile.name || !profile.big_five) {
+      console.warn('Profile missing essential fields')
+      return null
+    }
+
+    return profile
+  } catch (e) {
+    console.error('Failed to parse profile JSON:', e)
+    return null
+  }
+}
+
+/**
+ * Detect which phase the conversation is likely in
+ */
+export function detectPhase(messages) {
+  const userMessages = messages.filter(m => m.role === 'user')
+  const allText = userMessages.map(m => m.text.toLowerCase()).join(' ')
+  const count = userMessages.length
+
+  const phases = ['warmup', 'identity', 'lifestyle', 'values', 'deepdive']
+  
+  for (let i = phases.length - 1; i >= 0; i--) {
+    const phase = phases[i]
+    const config = PHASE_SIGNALS[phase]
+    
+    if (count >= config.minExchanges) {
+      const signalHits = config.signals.filter(signal => allText.includes(signal)).length
+      if (signalHits >= 2) {
+        return Math.min(i + 1, phases.length - 1)
+      }
+    }
+  }
+
+  if (count <= 4) return 0
+  if (count <= 10) return 1
+  if (count <= 16) return 2
+  if (count <= 22) return 3
+  return 4
+}
+
+/**
+ * Detect the user's communication vibe
+ */
+export function detectVibe(messages) {
+  const userMessages = messages.filter(m => m.role === 'user')
+  if (userMessages.length < 2) return 'unknown'
+
+  const recentTexts = userMessages.slice(-5).map(m => m.text)
+  const avgLength = recentTexts.reduce((sum, t) => sum + t.length, 0) / recentTexts.length
+  const allText = recentTexts.join(' ').toLowerCase()
+
+  const sarcasmSignals = ['lol', 'sure', 'right', 'yeah right', 'as if', '😂', '🙄', 'seriously', 'wow']
+  const sarcasmScore = sarcasmSignals.filter(s => allText.includes(s)).length
+
+  const depthSignals = ['i think', 'i feel', 'honestly', 'actually', 'the thing is', 'i believe', 'what matters']
+  const depthScore = depthSignals.filter(s => allText.includes(s)).length
+
+  const playfulSignals = ['haha', '😄', '🔥', 'omg', 'yess', 'love', 'totally', '!', 'aha']
+  const playfulScore = playfulSignals.filter(s => allText.includes(s)).length
+
+  if (avgLength < 15) return 'guarded'
+  if (sarcasmScore >= 3) return 'sarcastic'
+  if (playfulScore >= 3) return 'playful'
+  if (depthScore >= 3) return 'thoughtful'
+  if (avgLength > 80) return 'open'
+  return 'neutral'
+}
+
+/**
+ * Calculate conversation progress percentage
+ */
+export function getProgress(messages) {
+  const userCount = messages.filter(m => m.role === 'user').length
+  return Math.min(Math.round((userCount / 30) * 100), 100)
+}
+
+/**
+ * Human-like typing delay — shorter bursts with natural jitter
+ */
+export function humanDelay(text) {
+  // Base delay: 600-1200ms
+  const baseDelay = 600 + Math.random() * 600
+  // Per character: faster than before (simulate quick texter)
+  const perChar = Math.min(text.length * 8, 1500)
+  // Random jitter: 0-400ms
+  const jitter = Math.random() * 400
+  // Occasional "thinking" pause (10% chance of extra 500ms)
+  const thinkPause = Math.random() < 0.1 ? 500 : 0
+  return new Promise(resolve => setTimeout(resolve, baseDelay + perChar + jitter + thinkPause))
+}

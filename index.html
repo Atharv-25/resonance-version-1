@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Reso</title>
+    <meta name="description" content="Have a conversation. Be yourself." />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✨</text></svg>" />
+    <!-- Preload fonts so they're ready when React mounts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500&display=swap" rel="stylesheet" />
+    <!-- Inline loading screen — shows instantly before any JS loads -->
+    <style>
+      body {
+        margin: 0;
+        background: #1a1410;
+        font-family: 'Playfair Display', Georgia, serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      #app-loader {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1.5rem;
+        z-index: 9999;
+        background: #1a1410;
+        transition: opacity 0.4s ease;
+      }
+      #app-loader.fade-out {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #app-loader .loader-brand {
+        font-size: 1.5rem;
+        font-style: italic;
+        color: #c4956a;
+        letter-spacing: 0.02em;
+      }
+      #app-loader .loader-dots {
+        display: flex;
+        gap: 6px;
+      }
+      #app-loader .loader-dots span {
+        width: 6px;
+        height: 6px;
+        background: #c4956a;
+        border-radius: 50%;
+        animation: loaderBounce 1.4s infinite;
+      }
+      #app-loader .loader-dots span:nth-child(2) { animation-delay: 0.2s; }
+      #app-loader .loader-dots span:nth-child(3) { animation-delay: 0.4s; }
+      @keyframes loaderBounce {
+        0%, 60%, 100% { transform: translateY(0); opacity: 0.3; }
+        30% { transform: translateY(-6px); opacity: 1; }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Loading screen — visible immediately -->
+    <div id="app-loader">
+      <div class="loader-brand">Resonance</div>
+      <div class="loader-dots">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+    </div>
+
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+
+    <!-- Fade out loader once React app mounts -->
+    <script>
+      const checkReady = setInterval(() => {
+        const root = document.getElementById('root');
+        if (root && root.children.length > 0) {
+          const loader = document.getElementById('app-loader');
+          if (loader) {
+            loader.classList.add('fade-out');
+            setTimeout(() => loader.remove(), 500);
+          }
+          clearInterval(checkReady);
+        }
+      }, 100);
+    </script>
+  </body>
+</html>

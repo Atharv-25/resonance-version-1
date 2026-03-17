@@ -1,0 +1,326 @@
+/* ═══ Resonance Chatbot — Exact Formless.ai Style ═══ */
+/* Satoshi font, 30px, 500 weight, inline input, no bubbles */
+
+@import url('https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --bg: #1a1410;
+  --text-primary: #e8ddd0;
+  --text-muted: rgba(232, 221, 208, 0.4);
+  --accent: #c4956a;
+  --font: 'Satoshi', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --transition: 0.25s ease;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ═══ Chat Page ═══ */
+.chat-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  background: var(--bg);
+  position: relative;
+}
+
+/* ═══ Gender Selector ═══ */
+.gender-selector {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.gender-selector__content {
+  text-align: center;
+  max-width: 460px;
+}
+
+.gender-selector__title {
+  font-family: var(--font);
+  font-size: 30px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+  line-height: 1.2;
+}
+
+.gender-selector__subtitle {
+  font-size: 16px;
+  color: var(--text-muted);
+  margin-bottom: 3rem;
+  font-weight: 400;
+}
+
+.gender-selector__buttons {
+  display: flex;
+  gap: 1.5rem;
+  justify-content: center;
+}
+
+.gender-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 2rem 3rem;
+  border: 1px solid rgba(232, 221, 208, 0.15);
+  border-radius: 16px;
+  background: transparent;
+  cursor: pointer;
+  transition: all var(--transition);
+  min-width: 140px;
+}
+
+.gender-btn:hover {
+  border-color: rgba(232, 221, 208, 0.3);
+}
+
+.gender-btn__icon {
+  font-size: 2rem;
+  opacity: 1;
+  color: var(--text-primary);
+}
+
+.gender-btn__label {
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.gender-selector__error {
+  margin-top: 1.5rem;
+  color: #d4735c;
+  font-size: 14px;
+}
+
+/* ═══ Conversation Block — centered ═══ */
+.chat-conversation {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 3rem;
+  max-width: 680px;
+  width: 100%;
+  margin: 0 auto;
+  overflow: hidden;
+}
+
+/* ═══ Messages — exact formless style ═══ */
+.chat-msg {
+  width: 100%;
+}
+
+.chat-msg__text {
+  display: block;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+/* Bot text — formless exact: 30px, 500 weight, 1.2 line-height */
+.chat-msg--bot .chat-msg__text {
+  font-family: var(--font);
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+/* User response — same font but muted */
+.chat-msg--user {
+  margin-top: 1rem;
+}
+
+.chat-msg--user .chat-msg__text {
+  font-family: var(--font);
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: rgba(232, 221, 208, 0.5);
+}
+
+/* ═══ Typing Indicator ═══ */
+.typing-dots {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  vertical-align: middle;
+}
+
+.typing-dots span {
+  width: 5px;
+  height: 5px;
+  background: var(--text-primary);
+  border-radius: 50%;
+  animation: typingBounce 1.4s infinite;
+}
+
+.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typingBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.3; }
+  30% { transform: translateY(-5px); opacity: 1; }
+}
+
+/* ═══ Typewriter cursor ═══ */
+.typewriter-cursor {
+  font-weight: 300;
+  color: var(--text-primary);
+  animation: cursorBlink 0.7s infinite;
+  margin-left: 1px;
+}
+
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* ═══ Inline Input — formless exact: same size as bot, no border ═══ */
+.chat-inline-input {
+  margin-top: 30px;
+}
+
+.chat-input-form {
+  display: flex;
+  align-items: center;
+  background: transparent;
+}
+
+.chat-input {
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-primary);
+  font-family: var(--font);
+  font-size: 30px;
+  font-weight: 500;
+  resize: none;
+  outline: none;
+  max-height: 120px;
+  line-height: 1.2;
+}
+
+.chat-input::placeholder {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* ═══ Floating Mic — bottom right ═══ */
+.chat-mic-float {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid rgba(232, 221, 208, 0.15);
+  background: rgba(26, 20, 16, 0.9);
+  color: rgba(232, 221, 208, 0.4);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+  z-index: 10;
+}
+
+.chat-mic-float:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: rgba(232, 221, 208, 0.3);
+}
+
+.chat-mic-float--active {
+  color: var(--accent) !important;
+  border-color: var(--accent) !important;
+  animation: micPulse 1.5s infinite;
+}
+
+.chat-mic-float:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+@keyframes micPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(196, 149, 106, 0.3); }
+  50% { box-shadow: 0 0 0 10px rgba(196, 149, 106, 0); }
+}
+
+/* ═══ Conversation Complete ═══ */
+.chat-complete {
+  margin-top: 2rem;
+}
+
+.chat-complete__text {
+  font-family: var(--font);
+  font-size: 30px;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+/* ═══ Reset Button ═══ */
+.chat-reset-btn {
+  position: fixed;
+  bottom: 2rem;
+  left: 2rem;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  color: rgba(232, 221, 208, 0.2);
+  font-size: 0.8rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+  z-index: 10;
+}
+
+.chat-reset-btn:hover {
+  color: rgba(232, 221, 208, 0.6);
+}
+
+/* ═══ Responsive ═══ */
+@media (max-width: 640px) {
+  .chat-conversation {
+    padding: 2rem 1.5rem;
+  }
+
+  .chat-msg--bot .chat-msg__text,
+  .chat-msg--user .chat-msg__text,
+  .chat-input {
+    font-size: 20px;
+  }
+
+  .gender-btn {
+    padding: 1.5rem 2rem;
+    min-width: 120px;
+  }
+}
