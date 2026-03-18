@@ -91,11 +91,12 @@ export async function getInitialGreeting(userGender) {
     } catch (error) {
       console.error(`Greeting error (attempt ${attempt + 1}):`, error)
       const isRateLimit = error.message?.includes('429') || error.message?.includes('quota') || error.message?.includes('RESOURCE_EXHAUSTED')
-      if (isRateLimit && attempt < 2) {
-        console.log(`Rate limited, retrying in ${(attempt + 1) * 15}s...`)
-        await new Promise(r => setTimeout(r, (attempt + 1) * 15000))
+      if (isRateLimit && attempt < 1) { // Only retry once for greeting
+        console.log(`Rate limited, retrying in 2s...`)
+        await new Promise(r => setTimeout(r, 2000))
         continue
       }
+      break // break out of loop on other errors
     }
   }
   // Fallback greeting
@@ -131,15 +132,15 @@ export async function sendMessage(userText, messages = []) {
       console.error(`Chat error (attempt ${attempt + 1}):`, error)
       const isRateLimit = error.message?.includes('429') || error.message?.includes('quota') || error.message?.includes('RESOURCE_EXHAUSTED')
       
-      if (isRateLimit && attempt < 2) {
-        console.log(`Rate limited, retrying in ${(attempt + 1) * 15}s...`)
-        await new Promise(r => setTimeout(r, (attempt + 1) * 15000))
-        continue
+      if (isRateLimit && attempt < 1) { // Only retry once for chat to fail fast
+        console.log(`Rate limited, retrying in 2s...`)
+        await new Promise(r => setTimeout(r, 2000))
+        continue // try again
       }
 
       if (isRateLimit) {
         return {
-          text: "yo the API is being rate limited rn 😅 wait like 30 secs and try again? free tier vibes lol",
+          text: "yo the API expects us to chill for a sec 😅 (rate limit hit). give it a minute and try again?",
           profileData: null,
           isComplete: false,
           error: 'rate_limit',
