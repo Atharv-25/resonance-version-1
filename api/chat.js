@@ -36,7 +36,7 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile', // Groq's incredibly fast flagship model
+        model: 'llama-3.1-8b-instant', // 131K TPM free tier — 20x more headroom than 70b
         temperature: 0.92,
         top_p: 0.95,
         messages: messages
