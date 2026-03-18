@@ -35,8 +35,37 @@ export default async function handler(req, res) {
       ],
     });
 
+    // Gemini SDK STRICTLY requires history to start with 'user' and alternate.
+    // If the history starts with 'model' (because Reso sent the greeting first),
+    // we must prepend the hidden system trigger message that actually started the chain.
+    let safeHistory = history || [];
+    if (safeHistory.length > 0 && safeHistory[0].role === 'model') {
+      safeHistory.unshift({
+        role: 'user',
+        parts: [{ text: "[SYSTEM: Start of a new conversation. Send your opening message. Be warm, casual, use rizz. Follow your opening script. Keep it short — 2-3 sentences max.]" }]
+      });
+    }
+
+    // Additionally, Gemini SDK requires strictly alternating history.
+    // Let's filter out consecutive duplicates in roles just to be insanely safe.
+    let alternatingHistory = [];
+    let lastRole = null;
+    for (const msg of safeHistory) {
+      if (msg.role !== lastRole) {
+        alternatingHistory.push({
+          role: msg.role === 'bot' ? 'model' : msg.role, // Just in case bot leaked through
+          parts: msg.parts
+        });
+        lastRole = msg.role;
+      } else {
+        // If there are two consecutive users or models, combine their text
+        const lastIndex = alternatingHistory.length - 1;
+        alternatingHistory[lastIndex].parts[0].text += '\n\n' + msg.parts[0].text;
+      }
+    }
+
     const chatSession = model.startChat({
-      history: history || [],
+      history: alternatingHistory,
       systemInstruction: {
         parts: [{ text: systemPrompt }],
       },
