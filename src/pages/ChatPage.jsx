@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import useStore from '../store/useStore'
 import { storage } from '../services/storage'
 import {
@@ -33,7 +33,7 @@ export default function ChatPage() {
   const [error, setError] = useState('')
   const [isListening, setIsListening] = useState(false)
   const [typingText, setTypingText] = useState('')
-  const [pendingUserText, setPendingUserText] = useState('') // user text shown briefly before fade
+  const [isFading, setIsFading] = useState(false) // drives manual fade-out of bot msg + input together
   const typingAbortRef = useRef(null)
 
   // Typewriter effect — reveals text letter by letter at 55-85ms
@@ -123,19 +123,18 @@ export default function ChatPage() {
   const handleSend = async (e) => {
     e?.preventDefault()
     const text = input.trim()
-    if (!text || isTyping || conversationComplete) return
+    if (!text || isTyping || conversationComplete || isFading) return
 
+    // Step 1: Trigger fade-out of the entire block (bot msg + input with user's text)
+    setIsFading(true)
+
+    // Step 2: Wait for the fade animation to complete
+    await new Promise(r => setTimeout(r, 450))
+
+    // Step 3: Now update all state at once (invisible since block is already faded out)
     setInput('')
-
-    // Step 1: Show user's text in the CURRENT turn container (alongside bot message)
-    setPendingUserText(text)
-
-    // Step 2: Brief pause so both messages are visible before fading
-    await new Promise(r => setTimeout(r, 600))
-
-    // Step 3: Add message to store (this changes userMsgCount → key changes → BOTH fade out)
+    setIsFading(false)
     addMessage({ role: 'user', text })
-    setPendingUserText('')
 
     // Update phase detection
     const updatedMessages = [...messages, { role: 'user', text }]
@@ -173,7 +172,7 @@ export default function ChatPage() {
       setTyping(false)
       addMessage({
         role: 'bot',
-        text: "oops something glitched. mind sending that again? 🙏",
+        text: "oops something glitched. mind sending that again? \ud83d\ude4f",
       })
     }
   }
@@ -257,95 +256,78 @@ export default function ChatPage() {
     <div className="chat-page">
       {/* Single centered conversation block tied to the current turn */}
       <div className="chat-conversation">
-        <AnimatePresence mode="wait">
-          {(() => {
-            const botMsgs = messages.filter(m => m.role === 'bot')
-            const userMsgCount = messages.filter(m => m.role === 'user').length
+        {(() => {
+          const botMsgs = messages.filter(m => m.role === 'bot')
+          const userMsgCount = messages.filter(m => m.role === 'user').length
 
-            return (
-              <motion.div
-                key={`turn-${userMsgCount}`}
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
-                style={{ width: '100%' }}
-              >
-                {(() => {
-                  if (conversationComplete) {
-                    return (
-                      <div className="chat-complete">
-                        <p className="chat-complete__text">
-                          ✨ conversation complete — thanks for being real
-                        </p>
-                      </div>
-                    )
-                  }
+          return (
+            <motion.div
+              key={`turn-${userMsgCount}`}
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: isFading ? 0 : 1, y: isFading ? -20 : 0 }}
+              transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+              style={{ width: '100%' }}
+            >
+              {(() => {
+                if (conversationComplete) {
+                  return (
+                    <div className="chat-complete">
+                      <p className="chat-complete__text">
+                        ✨ conversation complete — thanks for being real
+                      </p>
+                    </div>
+                  )
+                }
 
-                  if (isTyping) {
-                    return (
-                      <div className="chat-msg chat-msg--bot">
-                        <span className="chat-msg__text">
-                          {typingText ? (
-                            <>{typingText}<span className="typewriter-cursor">|</span></>
-                          ) : (
-                            <span className="typing-dots">
-                              <span></span><span></span><span></span>
-                            </span>
-                          )}
-                        </span>
-                      </div>
-                    )
-                  }
-
-                  const botMsg = botMsgs[userMsgCount]
-                  if (botMsg) {
-                    return (
-                      <>
-                        <div className="chat-msg chat-msg--bot">
-                          <span className="chat-msg__text">{botMsg.text}</span>
-                        </div>
-
-                        {/* User's answer — shown briefly before both fade out together */}
-                        {pendingUserText && (
-                          <div className="chat-msg chat-msg--user">
-                            <span className="chat-msg__text">{pendingUserText}</span>
-                          </div>
+                if (isTyping) {
+                  return (
+                    <div className="chat-msg chat-msg--bot">
+                      <span className="chat-msg__text">
+                        {typingText ? (
+                          <>{typingText}<span className="typewriter-cursor">|</span></>
+                        ) : (
+                          <span className="typing-dots">
+                            <span></span><span></span><span></span>
+                          </span>
                         )}
-                      </>
-                    )
-                  }
+                      </span>
+                    </div>
+                  )
+                }
 
-                  return null
-                })()}
-              </motion.div>
-            )
-          })()}
-        </AnimatePresence>
+                const botMsg = botMsgs[userMsgCount]
+                if (botMsg) {
+                  return (
+                    <>
+                      <div className="chat-msg chat-msg--bot">
+                        <span className="chat-msg__text">{botMsg.text}</span>
+                      </div>
 
-        {/* Inline input — right below the bot message */}
-        {!conversationComplete && !isTyping && !pendingUserText && userGender && messages.filter(m => m.role === 'bot').length > 0 && (
-          <motion.div
-            className="chat-inline-input"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.1, duration: 0.4 }}
-          >
-            <form onSubmit={handleSend} className="chat-input-form">
-              <textarea
-                ref={inputRef}
-                className="chat-input"
-                placeholder="Type here..."
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                rows={1}
-                disabled={isTyping}
-                autoFocus
-              />
-            </form>
-          </motion.div>
-        )}
+                      {/* Input field — INSIDE the animated block so it fades with the bot msg */}
+                      <div className="chat-inline-input">
+                        <form onSubmit={handleSend} className="chat-input-form">
+                          <textarea
+                            ref={inputRef}
+                            className="chat-input"
+                            placeholder="Type here..."
+                            value={input}
+                            onChange={e => setInput(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            rows={1}
+                            disabled={isFading}
+                            autoFocus
+                          />
+                        </form>
+                      </div>
+                    </>
+                  )
+                }
+
+                return null
+              })()}
+            </motion.div>
+          )
+        })()}
 
       </div>
 
