@@ -10,8 +10,9 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 import { getResoPrompt, PHASE_SIGNALS } from './resonancePrompt'
 import { storage } from './storage'
 
-// ══ HARDCODED API KEY — replace with your Gemini API key ══
-const GEMINI_API_KEY = 'AIzaSyCCm1fol2mEeQ6ZfXSp8mWrqnKr5TVKdmc'
+// API key now loaded securely from environment variables
+// IMPORTANT: You must add VITE_GEMINI_API_KEY to your .env file locally and in your Vercel project settings
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || ''
 
 let genAI = null
 let chatSession = null
@@ -39,7 +40,7 @@ export async function startConversation(userGender, existingMessages = []) {
   const systemPrompt = getResoPrompt(userGender)
 
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.5-flash',
+    model: 'gemini-1.5-flash',
     generationConfig: {
       temperature: 0.92,
       topP: 0.95,
