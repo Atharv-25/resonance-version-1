@@ -1,97 +1,54 @@
 /**
- * RESONANCE — Chat Engine
+ * RESONANCE — Chat Engine (Frontend Client)
  * 
- * Manages conversation flow with Gemini AI, phase tracking,
- * context management, and profile extraction.
- * API key is hardcoded for zero-friction user experience.
+ * Manages conversation flow by calling the secure Vercel backend (`/api/chat`).
+ * API keys and Google SDK logic are strictly on the server now.
  */
 
-import { GoogleGenerativeAI } from '@google/generative-ai'
-import { getResoPrompt, PHASE_SIGNALS } from './resonancePrompt'
+import { PHASE_SIGNALS } from './resonancePrompt'
 import { storage } from './storage'
 
-// API key now loaded securely from environment variables
-// IMPORTANT: You must add VITE_GEMINI_API_KEY to your .env file locally and in your Vercel project settings
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || ''
-
-let genAI = null
-let chatSession = null
 let currentUserGender = null
 
 /**
- * Initialize the Gemini client (uses hardcoded key)
+ * Empty stub for backward compatibility. 
+ * The backend is stateless, so we pass history on every request anyway.
  */
-function ensureAI() {
-  if (!genAI) {
-    genAI = new GoogleGenerativeAI(GEMINI_API_KEY)
-  }
-  return genAI
-}
-
-/**
- * Start a new conversation with the gender-appropriate persona
- * @param {'male'|'female'} userGender
- * @param {Array} existingMessages — for resuming
- */
-export async function startConversation(userGender, existingMessages = []) {
-  ensureAI()
+export async function startConversation(userGender) {
   currentUserGender = userGender
-
-  const systemPrompt = getResoPrompt(userGender)
-
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
-    generationConfig: {
-      temperature: 0.92,
-      topP: 0.95,
-      topK: 40,
-      maxOutputTokens: 512, // shorter responses
-    },
-    safetySettings: [
-      { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
-      { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-      { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-      { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
-    ],
-  })
-
-  // Build conversation history for resuming
-  const history = existingMessages
-    .filter(m => m.role === 'user' || m.role === 'model')
-    .map(m => ({
-      role: m.role === 'bot' ? 'model' : m.role,
-      parts: [{ text: m.text }],
-    }))
-
-  chatSession = model.startChat({
-    history,
-    systemInstruction: {
-      parts: [{ text: systemPrompt }],
-    },
-  })
-
-  return chatSession
 }
 
 /**
  * Get the initial greeting from Reso (bot speaks first)
  */
 export async function getInitialGreeting(userGender) {
-  if (!chatSession) {
-    await startConversation(userGender)
-  }
-
-  // Retry up to 3 times for rate limit errors
+  currentUserGender = userGender;
+  
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const result = await chatSession.sendMessage(
-        "[SYSTEM: Start of a new conversation. Send your opening message. Be warm, casual, use rizz. Follow your opening script. Keep it short — 2-3 sentences max.]"
-      )
-      return result.response.text()
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          history: [],
+          message: "[SYSTEM: Start of a new conversation. Send your opening message. Be warm, casual, use rizz. Follow your opening script. Keep it short — 2-3 sentences max.]",
+          userGender: currentUserGender
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        if (response.status === 429) throw new Error('429');
+        if (response.status === 401) throw new Error('API_KEY_INVALID');
+        throw new Error(data.message || data.error || 'API error');
+      }
+
+      return data.text;
     } catch (error) {
       console.error(`Greeting error (attempt ${attempt + 1}):`, error)
-      const isRateLimit = error.message?.includes('429') || error.message?.includes('quota') || error.message?.includes('RESOURCE_EXHAUSTED')
-      if (isRateLimit && attempt < 1) { // Only retry once for greeting
+      const isRateLimit = error.message.includes('429') || error.message.includes('rate_limit')
+      if (isRateLimit && attempt < 1) { // Only retry once
         console.log(`Rate limited, retrying in 2s...`)
         await new Promise(r => setTimeout(r, 2000))
         continue
@@ -99,6 +56,7 @@ export async function getInitialGreeting(userGender) {
       break // break out of loop on other errors
     }
   }
+  
   // Fallback greeting
   return "hey ✨ I'm Reso. think of me as that one friend who somehow always knows who'd be perfect for you. I'm gonna ask you some stuff — not the boring generic questions tho, promise. but first — what should I call you?"
 }
@@ -107,20 +65,50 @@ export async function getInitialGreeting(userGender) {
  * Send a message to Reso and get the response
  */
 export async function sendMessage(userText, messages = []) {
-  if (!chatSession) {
-    await startConversation(currentUserGender || 'male', messages)
+  if (!currentUserGender) {
+    currentUserGender = 'male'
   }
 
-  // Retry up to 3 times for rate limit errors
+  // The 'messages' array from ChatPage includes the NEW user message at the very end.
+  // We need to build the history for the backend EXPECTING the new user message to be separate.
+  let historyMessages = messages;
+  if (messages.length > 0 && messages[messages.length - 1].text === userText && messages[messages.length - 1].role === 'user') {
+    historyMessages = messages.slice(0, -1);
+  }
+
+  const historyToPass = historyMessages
+    .filter(m => m.role === 'user' || m.role === 'bot')
+    .map(m => ({
+      role: m.role === 'bot' ? 'model' : 'user',
+      parts: [{ text: m.text }]
+    }))
+
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const result = await chatSession.sendMessage(userText)
-      const responseText = result.response.text()
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          history: historyToPass,
+          message: userText,
+          userGender: currentUserGender
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        if (response.status === 429) throw new Error('429');
+        if (response.status === 401) throw new Error('API_KEY_INVALID');
+        throw new Error(data.message || data.error || 'API error');
+      }
+
+      const responseText = data.text;
       
       // Check if the response contains the profile JSON
       const profileData = extractProfileFromResponse(responseText)
       
-      // Clean the response text (remove the JSON block if present)
+      // Clean the response text
       const cleanText = responseText.replace(/\$\$RESONANCE_PROFILE\$\$[\s\S]*?\$\$RESONANCE_PROFILE\$\$/g, '').trim()
 
       return {
@@ -130,9 +118,9 @@ export async function sendMessage(userText, messages = []) {
       }
     } catch (error) {
       console.error(`Chat error (attempt ${attempt + 1}):`, error)
-      const isRateLimit = error.message?.includes('429') || error.message?.includes('quota') || error.message?.includes('RESOURCE_EXHAUSTED')
+      const isRateLimit = error.message.includes('429') || error.message.includes('rate_limit')
       
-      if (isRateLimit && attempt < 1) { // Only retry once for chat to fail fast
+      if (isRateLimit && attempt < 1) { 
         console.log(`Rate limited, retrying in 2s...`)
         await new Promise(r => setTimeout(r, 2000))
         continue // try again
@@ -147,7 +135,7 @@ export async function sendMessage(userText, messages = []) {
         }
       }
 
-      if (error.message?.includes('API_KEY_INVALID') || error.message?.includes('API key not valid')) {
+      if (error.message.includes('API_KEY_INVALID') || error.message.includes('API key not valid')) {
         return {
           text: "the API key isn't working rn 😬 might need a new one",
           profileData: null,
@@ -258,13 +246,9 @@ export function getProgress(messages) {
  * Human-like typing delay — shorter bursts with natural jitter
  */
 export function humanDelay(text) {
-  // Base delay: 600-1200ms
   const baseDelay = 600 + Math.random() * 600
-  // Per character: faster than before (simulate quick texter)
   const perChar = Math.min(text.length * 8, 1500)
-  // Random jitter: 0-400ms
   const jitter = Math.random() * 400
-  // Occasional "thinking" pause (10% chance of extra 500ms)
   const thinkPause = Math.random() < 0.1 ? 500 : 0
   return new Promise(resolve => setTimeout(resolve, baseDelay + perChar + jitter + thinkPause))
 }
