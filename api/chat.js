@@ -38,7 +38,7 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.0-flash-lite-preview-02-05:free', // Deeply reliable free OpenRouter model
+        model: 'meta-llama/llama-3.3-70b-instruct:free', // Ultra reliable completely free OpenRouter model
         temperature: 0.92,
         top_p: 0.95,
         messages: messages
