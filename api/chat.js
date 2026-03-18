@@ -20,7 +20,7 @@ export default async function handler(req, res) {
     const systemPrompt = getResoPrompt(userGender || 'male');
 
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-1.5-flash-8b',
       generationConfig: {
         temperature: 0.92,
         topP: 0.95,
