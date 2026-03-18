@@ -222,7 +222,7 @@ body {
   font-weight: 500;
   resize: none;
   outline: none;
-  max-height: 120px;
+  overflow: hidden;
   line-height: 1.2;
 }
 

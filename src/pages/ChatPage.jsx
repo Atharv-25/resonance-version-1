@@ -133,6 +133,7 @@ export default function ChatPage() {
 
     // Step 3: Now update all state at once (invisible since block is already faded out)
     setInput('')
+    if (inputRef.current) inputRef.current.style.height = 'auto'
     setIsFading(false)
     addMessage({ role: 'user', text })
 
@@ -195,6 +196,16 @@ export default function ChatPage() {
       recognitionRef.current.start()
       setIsListening(true)
     }
+  }
+
+  // Auto-resizing input
+  const handleInputChange = (e) => {
+    setInput(e.target.value)
+    
+    // Reset height to auto to get the true scrollHeight
+    e.target.style.height = 'auto'
+    // Set height perfectly to fit the content
+    e.target.style.height = `${e.target.scrollHeight}px`
   }
 
   // Reset
@@ -311,7 +322,7 @@ export default function ChatPage() {
                             className="chat-input"
                             placeholder="Type here..."
                             value={input}
-                            onChange={e => setInput(e.target.value)}
+                            onChange={handleInputChange}
                             onKeyDown={handleKeyDown}
                             rows={1}
                             disabled={isFading}
