@@ -145,7 +145,7 @@ export async function sendMessage(userText, messages = []) {
       }
 
       return {
-        text: "oops something glitched on my end. mind sending that again?",
+        text: `bruh something glitched hard: "${error.message}". try sending that again? \ud83d\ude4f`,
         profileData: null,
         isComplete: false,
         error: error.message,
