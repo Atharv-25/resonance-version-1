@@ -33,6 +33,7 @@ export default function ChatPage() {
   const [error, setError] = useState('')
   const [isListening, setIsListening] = useState(false)
   const [typingText, setTypingText] = useState('')
+  const [pendingUserText, setPendingUserText] = useState('') // user text shown briefly before fade
   const typingAbortRef = useRef(null)
 
   // Typewriter effect — reveals text letter by letter at 55-85ms
@@ -125,7 +126,16 @@ export default function ChatPage() {
     if (!text || isTyping || conversationComplete) return
 
     setInput('')
+
+    // Step 1: Show user's text in the CURRENT turn container (alongside bot message)
+    setPendingUserText(text)
+
+    // Step 2: Brief pause so both messages are visible before fading
+    await new Promise(r => setTimeout(r, 600))
+
+    // Step 3: Add message to store (this changes userMsgCount → key changes → BOTH fade out)
     addMessage({ role: 'user', text })
+    setPendingUserText('')
 
     // Update phase detection
     const updatedMessages = [...messages, { role: 'user', text }]
@@ -249,12 +259,8 @@ export default function ChatPage() {
       <div className="chat-conversation">
         <AnimatePresence mode="wait">
           {(() => {
-            const userMsgs = messages.filter(m => m.role === 'user')
             const botMsgs = messages.filter(m => m.role === 'bot')
-            const userMsgCount = userMsgs.length
-
-            // The previous user message for this turn (shown above the bot reply)
-            const prevUserMsg = userMsgCount > 0 ? userMsgs[userMsgCount - 1] : null
+            const userMsgCount = messages.filter(m => m.role === 'user').length
 
             return (
               <motion.div
@@ -265,13 +271,6 @@ export default function ChatPage() {
                 transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
                 style={{ width: '100%' }}
               >
-                {/* Show the user's previous response so it fades out together with the bot reply */}
-                {prevUserMsg && (
-                  <div className="chat-msg chat-msg--user">
-                    <span className="chat-msg__text">{prevUserMsg.text}</span>
-                  </div>
-                )}
-
                 {(() => {
                   if (conversationComplete) {
                     return (
@@ -302,9 +301,18 @@ export default function ChatPage() {
                   const botMsg = botMsgs[userMsgCount]
                   if (botMsg) {
                     return (
-                      <div className="chat-msg chat-msg--bot">
-                        <span className="chat-msg__text">{botMsg.text}</span>
-                      </div>
+                      <>
+                        <div className="chat-msg chat-msg--bot">
+                          <span className="chat-msg__text">{botMsg.text}</span>
+                        </div>
+
+                        {/* User's answer — shown briefly before both fade out together */}
+                        {pendingUserText && (
+                          <div className="chat-msg chat-msg--user">
+                            <span className="chat-msg__text">{pendingUserText}</span>
+                          </div>
+                        )}
+                      </>
                     )
                   }
 
@@ -316,7 +324,7 @@ export default function ChatPage() {
         </AnimatePresence>
 
         {/* Inline input — right below the bot message */}
-        {!conversationComplete && !isTyping && userGender && messages.filter(m => m.role === 'bot').length > 0 && (
+        {!conversationComplete && !isTyping && !pendingUserText && userGender && messages.filter(m => m.role === 'bot').length > 0 && (
           <motion.div
             className="chat-inline-input"
             initial={{ opacity: 0 }}
