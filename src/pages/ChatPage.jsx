@@ -249,8 +249,12 @@ export default function ChatPage() {
       <div className="chat-conversation">
         <AnimatePresence mode="wait">
           {(() => {
-            const userMsgCount = messages.filter(m => m.role === 'user').length
+            const userMsgs = messages.filter(m => m.role === 'user')
             const botMsgs = messages.filter(m => m.role === 'bot')
+            const userMsgCount = userMsgs.length
+
+            // The previous user message for this turn (shown above the bot reply)
+            const prevUserMsg = userMsgCount > 0 ? userMsgs[userMsgCount - 1] : null
 
             return (
               <motion.div
@@ -261,6 +265,13 @@ export default function ChatPage() {
                 transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
                 style={{ width: '100%' }}
               >
+                {/* Show the user's previous response so it fades out together with the bot reply */}
+                {prevUserMsg && (
+                  <div className="chat-msg chat-msg--user">
+                    <span className="chat-msg__text">{prevUserMsg.text}</span>
+                  </div>
+                )}
+
                 {(() => {
                   if (conversationComplete) {
                     return (
