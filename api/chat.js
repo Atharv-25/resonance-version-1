@@ -8,15 +8,15 @@ export default async function handler(req, res) {
   try {
     const { history, message, userGender } = req.body;
     
-    // Load OpenRouter API key from Vercel
-    const apiKey = process.env.OPENROUTER_API_KEY;
+    // Load Groq API key from Vercel
+    const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
-      return res.status(500).json({ error: 'Missing OPENROUTER_API_KEY in Vercel environment variables' });
+      return res.status(500).json({ error: 'Missing GROQ_API_KEY in Vercel environment variables' });
     }
 
     const systemPrompt = getResoPrompt(userGender || 'male');
 
-    // Convert Gemini frontend history format to OpenRouter (OpenAI) format
+    // Convert Gemini frontend history format to Groq (OpenAI) format
     const convertedHistory = (history || []).map(msg => ({
       role: msg.role === 'model' || msg.role === 'bot' ? 'assistant' : 'user',
       content: msg.parts[0].text
@@ -29,31 +29,29 @@ export default async function handler(req, res) {
       { role: 'user', content: message }
     ];
 
-    const openRouterResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
-        'HTTP-Referer': 'https://resonance-version-1.vercel.app', // Highly recommended by OpenRouter
-        'X-Title': 'Resonance Dating Bot',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'meta-llama/llama-3.3-70b-instruct:free', // Ultra reliable completely free OpenRouter model
+        model: 'llama-3.3-70b-versatile', // Groq's incredibly fast flagship model
         temperature: 0.92,
         top_p: 0.95,
         messages: messages
       }),
     });
 
-    const data = await openRouterResponse.json();
+    const data = await groqResponse.json();
 
-    if (!openRouterResponse.ok) {
-      if (openRouterResponse.status === 429) {
-        return res.status(429).json({ error: 'rate_limit', message: 'OpenRouter rate limit hit.' });
+    if (!groqResponse.ok) {
+      if (groqResponse.status === 429) {
+        return res.status(429).json({ error: 'rate_limit', message: 'Groq rate limit hit. (Wait 60s)' });
       }
-      return res.status(openRouterResponse.status).json({ 
+      return res.status(groqResponse.status).json({ 
         error: 'api_error', 
-        message: data.error?.message || 'OpenRouter API Error' 
+        message: data.error?.message || 'Groq API Error' 
       });
     }
 
