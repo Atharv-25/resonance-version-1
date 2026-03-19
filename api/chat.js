@@ -8,94 +8,76 @@ export default async function handler(req, res) {
   try {
     const { history, message, userGender } = req.body;
     
-    // Load Gemini API key from Vercel env
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
-      return res.status(500).json({ error: 'Missing GEMINI_API_KEY in Vercel environment variables' });
+      return res.status(500).json({ error: 'Missing GROQ_API_KEY in Vercel environment variables' });
     }
 
     const systemPrompt = getResoPrompt(userGender || 'male');
 
-    // Build Gemini-native history format
-    // Gemini requires history to start with 'user' and strictly alternate user/model
-    let geminiHistory = (history || []).map(msg => ({
-      role: msg.role === 'bot' ? 'model' : msg.role,
-      parts: msg.parts || [{ text: msg.text || '' }]
+    // Convert frontend history format to Groq (OpenAI) format
+    const convertedHistory = (history || []).map(msg => ({
+      role: msg.role === 'model' || msg.role === 'bot' ? 'assistant' : 'user',
+      content: msg.parts ? msg.parts[0].text : (msg.text || '')
     }));
 
-    // Ensure history starts with 'user' (Gemini strict requirement)
-    if (geminiHistory.length > 0 && geminiHistory[0].role === 'model') {
-      geminiHistory.unshift({
-        role: 'user',
-        parts: [{ text: '[SYSTEM: Start conversation. Send opening message.]' }]
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      ...convertedHistory,
+      { role: 'user', content: message }
+    ];
+
+    // Smart retry logic — silently waits and retries on rate limits
+    // User just sees Reso "thinking" a bit longer, never sees an error
+    const MAX_RETRIES = 3;
+    
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          temperature: 0.92,
+          top_p: 0.95,
+          messages: messages
+        }),
+      });
+
+      // SUCCESS — return immediately
+      if (groqResponse.ok) {
+        const data = await groqResponse.json();
+        const responseText = data.choices[0].message.content;
+        return res.status(200).json({ text: responseText });
+      }
+
+      // RATE LIMITED — silently wait and retry
+      if (groqResponse.status === 429) {
+        if (attempt < MAX_RETRIES - 1) {
+          // Wait 8 seconds before next attempt (token limit resets every ~60s)
+          await new Promise(r => setTimeout(r, 8000));
+          continue;
+        }
+        // All retries exhausted
+        return res.status(429).json({ 
+          error: 'rate_limit', 
+          message: 'Still rate limited after retries. Wait 30 seconds and try again.' 
+        });
+      }
+
+      // OTHER ERROR — return immediately
+      const errorData = await groqResponse.json();
+      return res.status(groqResponse.status).json({ 
+        error: 'api_error', 
+        message: errorData.error?.message || 'Groq API Error' 
       });
     }
-
-    // Ensure strictly alternating roles (merge consecutive same-role messages)
-    let cleanHistory = [];
-    let lastRole = null;
-    for (const msg of geminiHistory) {
-      if (msg.role !== lastRole) {
-        cleanHistory.push(msg);
-        lastRole = msg.role;
-      } else {
-        // Merge with previous
-        const prev = cleanHistory[cleanHistory.length - 1];
-        prev.parts[0].text += '\n' + msg.parts[0].text;
-      }
-    }
-
-    // Build the request body for Gemini REST API
-    const requestBody = {
-      system_instruction: {
-        parts: [{ text: systemPrompt }]
-      },
-      contents: [
-        ...cleanHistory,
-        { role: 'user', parts: [{ text: message }] }
-      ],
-      generationConfig: {
-        temperature: 0.92,
-        topP: 0.95,
-        maxOutputTokens: 300,
-      }
-    };
-
-    // Call Gemini REST API directly (NO SDK needed!)
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-    
-    const geminiResponse = await fetch(geminiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-    });
-
-    const data = await geminiResponse.json();
-
-    if (!geminiResponse.ok) {
-      const errorMsg = data.error?.message || 'Gemini API Error';
-      const status = geminiResponse.status;
-      
-      if (status === 429) {
-        return res.status(429).json({ error: 'rate_limit', message: 'Gemini rate limit hit. Wait a moment.' });
-      }
-      if (status === 400) {
-        return res.status(400).json({ error: 'bad_request', message: errorMsg });
-      }
-      return res.status(status).json({ error: 'api_error', message: errorMsg });
-    }
-
-    // Extract text from Gemini's response structure
-    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    
-    if (!responseText) {
-      return res.status(500).json({ error: 'empty_response', message: 'Gemini returned an empty response' });
-    }
-
-    return res.status(200).json({ text: responseText });
     
   } catch (error) {
     console.error('API Backend Error:', error);
     return res.status(500).json({ error: 'internal_error', message: error.message });
   }
 }
+
