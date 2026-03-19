@@ -8,54 +8,89 @@ export default async function handler(req, res) {
   try {
     const { history, message, userGender } = req.body;
     
-    // Load Groq API key from Vercel
-    const apiKey = process.env.GROQ_API_KEY;
+    // Load Gemini API key from Vercel env
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return res.status(500).json({ error: 'Missing GROQ_API_KEY in Vercel environment variables' });
+      return res.status(500).json({ error: 'Missing GEMINI_API_KEY in Vercel environment variables' });
     }
 
     const systemPrompt = getResoPrompt(userGender || 'male');
 
-    // Convert Gemini frontend history format to Groq (OpenAI) format
-    const convertedHistory = (history || []).map(msg => ({
-      role: msg.role === 'model' || msg.role === 'bot' ? 'assistant' : 'user',
-      content: msg.parts[0].text
+    // Build Gemini-native history format
+    // Gemini requires history to start with 'user' and strictly alternate user/model
+    let geminiHistory = (history || []).map(msg => ({
+      role: msg.role === 'bot' ? 'model' : msg.role,
+      parts: msg.parts || [{ text: msg.text || '' }]
     }));
 
-    // Construct the payload array
-    const messages = [
-      { role: 'system', content: systemPrompt },
-      ...convertedHistory,
-      { role: 'user', content: message }
-    ];
-
-    const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'llama-3.1-8b-instant', // 131K TPM free tier — 20x more headroom than 70b
-        temperature: 0.92,
-        top_p: 0.95,
-        messages: messages
-      }),
-    });
-
-    const data = await groqResponse.json();
-
-    if (!groqResponse.ok) {
-      if (groqResponse.status === 429) {
-        return res.status(429).json({ error: 'rate_limit', message: 'Groq rate limit hit. (Wait 60s)' });
-      }
-      return res.status(groqResponse.status).json({ 
-        error: 'api_error', 
-        message: data.error?.message || 'Groq API Error' 
+    // Ensure history starts with 'user' (Gemini strict requirement)
+    if (geminiHistory.length > 0 && geminiHistory[0].role === 'model') {
+      geminiHistory.unshift({
+        role: 'user',
+        parts: [{ text: '[SYSTEM: Start conversation. Send opening message.]' }]
       });
     }
 
-    const responseText = data.choices[0].message.content;
+    // Ensure strictly alternating roles (merge consecutive same-role messages)
+    let cleanHistory = [];
+    let lastRole = null;
+    for (const msg of geminiHistory) {
+      if (msg.role !== lastRole) {
+        cleanHistory.push(msg);
+        lastRole = msg.role;
+      } else {
+        // Merge with previous
+        const prev = cleanHistory[cleanHistory.length - 1];
+        prev.parts[0].text += '\n' + msg.parts[0].text;
+      }
+    }
+
+    // Build the request body for Gemini REST API
+    const requestBody = {
+      system_instruction: {
+        parts: [{ text: systemPrompt }]
+      },
+      contents: [
+        ...cleanHistory,
+        { role: 'user', parts: [{ text: message }] }
+      ],
+      generationConfig: {
+        temperature: 0.92,
+        topP: 0.95,
+        maxOutputTokens: 300,
+      }
+    };
+
+    // Call Gemini REST API directly (NO SDK needed!)
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+    
+    const geminiResponse = await fetch(geminiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    });
+
+    const data = await geminiResponse.json();
+
+    if (!geminiResponse.ok) {
+      const errorMsg = data.error?.message || 'Gemini API Error';
+      const status = geminiResponse.status;
+      
+      if (status === 429) {
+        return res.status(429).json({ error: 'rate_limit', message: 'Gemini rate limit hit. Wait a moment.' });
+      }
+      if (status === 400) {
+        return res.status(400).json({ error: 'bad_request', message: errorMsg });
+      }
+      return res.status(status).json({ error: 'api_error', message: errorMsg });
+    }
+
+    // Extract text from Gemini's response structure
+    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    
+    if (!responseText) {
+      return res.status(500).json({ error: 'empty_response', message: 'Gemini returned an empty response' });
+    }
 
     return res.status(200).json({ text: responseText });
     
