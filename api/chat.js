@@ -8,8 +8,13 @@ export default async function handler(req, res) {
   try {
     const { history, message, userGender } = req.body;
     
-    const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey) {
+    // Load BOTH Groq API keys for failover rotation
+    const keys = [
+      process.env.GROQ_API_KEY,
+      process.env.GROQ_API_KEY_2
+    ].filter(Boolean); // Remove any undefined keys
+    
+    if (keys.length === 0) {
       return res.status(500).json({ error: 'Missing GROQ_API_KEY in Vercel environment variables' });
     }
 
@@ -27,11 +32,12 @@ export default async function handler(req, res) {
       { role: 'user', content: message }
     ];
 
-    // Smart retry logic — silently waits and retries on rate limits
-    // User just sees Reso "thinking" a bit longer, never sees an error
-    const MAX_RETRIES = 3;
-    
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    // Dual-key failover with smart retry
+    // Try Key 1 → if rate limited → try Key 2 → if still limited → wait & retry Key 1
+    for (let attempt = 0; attempt < keys.length + 1; attempt++) {
+      const keyIndex = attempt % keys.length;
+      const apiKey = keys[keyIndex];
+
       const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -53,17 +59,21 @@ export default async function handler(req, res) {
         return res.status(200).json({ text: responseText });
       }
 
-      // RATE LIMITED — silently wait and retry
+      // RATE LIMITED — try next key, or wait and retry
       if (groqResponse.status === 429) {
-        if (attempt < MAX_RETRIES - 1) {
-          // Wait 8 seconds before next attempt (token limit resets every ~60s)
+        if (attempt < keys.length - 1) {
+          // Still have another key to try — switch immediately
+          continue;
+        }
+        if (attempt === keys.length - 1 && keys.length > 1) {
+          // Both keys exhausted once — wait 8s and try first key again
           await new Promise(r => setTimeout(r, 8000));
           continue;
         }
         // All retries exhausted
         return res.status(429).json({ 
           error: 'rate_limit', 
-          message: 'Still rate limited after retries. Wait 30 seconds and try again.' 
+          message: 'Both API keys are rate limited. Wait 30 seconds and try again.' 
         });
       }
 
